@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  # ==============================================================================
+  # MetroSaathi Web Application (Next.js Standalone Container)
+  # ==============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: metrosaathi_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    # Load default env vars from .env.local (e.g. Supabase Auth keys)
+    env_file:
+      - .env.local
+    # Explicitly override DATABASE_URL to point to the local containerized Postgres
+    # so local Docker testing NEVER touches your production Supabase database.
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/metrosaathi?sslmode=disable
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ==============================================================================
+  # Local PostgreSQL 17 Database (For Isolated Local Docker Testing)
+  # NOTE: Production deployments on Vercel continue to use hosted Supabase.
+  # The init.sql script automatically seeds all 83 stations & 82 edges on first run.
+  # ==============================================================================
+  db:
+    image: postgres:17-alpine
+    container_name: metrosaathi_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: metrosaathi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d metrosaathi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    name: metrosaathi_postgres_data

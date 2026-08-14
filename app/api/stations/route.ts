@@ -1,5 +1,5 @@
 import { METRO_LINES } from "@/data/lines";
-import { STATIONS } from "@/data/stations";
+import { getStationsFromDB } from "@/lib/db-data";
 import { POPULAR_STATIONS, searchStations } from "@/lib/search";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -8,19 +8,19 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get("q");
   const line = searchParams.get("line");
 
-  let result = STATIONS;
+  let stations = await getStationsFromDB();
 
   if (query) {
-    result = searchStations(query, 20);
+    stations = searchStations(query, 20);
   }
 
   if (line) {
-    result = result.filter((s) => s.lines.includes(line as any));
+    stations = stations.filter((s) => s.lines.includes(line as any));
   }
 
   return NextResponse.json({
-    total: result.length,
-    stations: result,
+    total: stations.length,
+    stations,
     popular: POPULAR_STATIONS,
     lines: METRO_LINES,
   });

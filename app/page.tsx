@@ -1,6 +1,7 @@
 "use client";
 
 import { AutocompleteInput } from "@/components/AutocompleteInput";
+import { AuthModal } from "@/components/AuthModal";
 import { FareBreakdownCard } from "@/components/FareBreakdownCard";
 import { Header } from "@/components/Header";
 import { JourneyLegs } from "@/components/JourneyLegs";
@@ -8,21 +9,27 @@ import { MetroMapSvg } from "@/components/MetroMapSvg";
 import { NetworkOverview } from "@/components/NetworkOverview";
 import { RecentRouteItem, RecentSearches } from "@/components/RecentSearches";
 import { RouteSummary } from "@/components/RouteSummary";
+import { SavedRoutesCard } from "@/components/SavedRoutesCard";
 import { StationBadge } from "@/components/StationBadge";
 import { METRO_LINES } from "@/data/lines";
 import { STATIONS, getStationById } from "@/data/stations";
 import { findRoute } from "@/lib/graph";
 import { POPULAR_STATIONS } from "@/lib/search";
+import { supabase } from "@/lib/supabase";
 import { MetroLine, RoutePreference, RouteResult, Station } from "@/lib/types";
+import { User } from "@supabase/supabase-js";
 import { motion } from "framer-motion";
 import {
   ArrowRightLeft,
   Banknote,
+  Bookmark,
+  BookmarkCheck,
   Check,
   CheckCircle2,
   Compass,
   Info,
   Layers,
+  Loader2,
   Map,
   MapPin,
   RotateCcw,
@@ -40,10 +47,29 @@ export default function HomePage() {
   const [toStation, setToStation] = useState<Station | null>(null);
   const [preference, setPreference] = useState<RoutePreference>("fastest");
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
-  const [activeTab, setActiveTab] = useState<"route" | "map" | "fare" | "directory">("route");
+  const [activeTab, setActiveTab] = useState<"route" | "map" | "fare" | "directory" | "saved">("route");
   const [recentRoutes, setRecentRoutes] = useState<RecentRouteItem[]>([]);
   const [copiedLink, setCopiedLink] = useState(false);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const [routeSaved, setRouteSaved] = useState(false);
+
+  // Initialize Supabase Auth state
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Load recent searches from localStorage & handle URL query parameters on initial load
   useEffect(() => {
@@ -81,6 +107,7 @@ export default function HomePage() {
     if (fromStation && toStation) {
       const result = findRoute(fromStation.id, toStation.id, preference);
       setRouteResult(result);
+      setRouteSaved(false);
 
       // Save to recent searches if distinct stations
       if (fromStation.id !== toStation.id) {
@@ -136,6 +163,7 @@ export default function HomePage() {
     const t = getStationById(toId);
     if (f) setFromStation(f);
     if (t) setToStation(t);
+    setActiveTab("route");
   };
 
   // Clear recent searches
@@ -167,9 +195,52 @@ export default function HomePage() {
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  // Save active route to Supabase PostgreSQL database
+  const handleSaveRouteToDB = async () => {
+    if (!fromStation || !toStation) return;
+    if (!user) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    setSavingRoute(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setAuthModalOpen(true);
+        return;
+      }
+
+      const res = await fetch("/api/saved-routes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          from_station: fromStation.id,
+          to_station: toStation.id,
+        }),
+      });
+
+      if (res.ok) {
+        setRouteSaved(true);
+      }
+    } catch (err) {
+      console.error("Error saving route:", err);
+    } finally {
+      setSavingRoute(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#070a13] text-slate-100 flex flex-col selection:bg-purple-500/30">
-      <Header onOpenInfoModal={() => setInfoModalOpen(true)} />
+      <Header
+        user={user}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenInfoModal={() => setInfoModalOpen(true)}
+      />
 
       {/* Hero Ambient Background Lighting */}
       <div className="relative overflow-hidden pt-6 pb-12 sm:pt-8 sm:pb-16 px-4 sm:px-6 lg:px-8">
@@ -182,7 +253,7 @@ export default function HomePage() {
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-700/80 text-xs font-semibold text-purple-300 shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>Namma Metro (BMRCL) 2026 Transit Guide</span>
+              <span>Namma Metro (BMRCL) 2026 Transit Guide • PostgreSQL Powered</span>
             </div>
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white font-display">
               Navigate Bangalore Metro with{" "}
@@ -307,7 +378,7 @@ export default function HomePage() {
               {/* Summary Strip */}
               <RouteSummary route={routeResult} />
 
-              {/* Action Toolbar: Tabs & Share Link */}
+              {/* Action Toolbar: Tabs, Save to DB & Share Link */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-2 rounded-2xl border border-slate-800/80">
                 {/* Navigation Tabs */}
                 <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
@@ -352,6 +423,19 @@ export default function HomePage() {
 
                   <button
                     type="button"
+                    onClick={() => setActiveTab("saved")}
+                    className={`px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 ${
+                      activeTab === "saved"
+                        ? "bg-purple-600 text-white shadow-lg"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <BookmarkCheck className="w-4 h-4" />
+                    <span>Saved Commutes</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveTab("directory")}
                     className={`px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 ${
                       activeTab === "directory"
@@ -364,25 +448,55 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                {/* Share Link Button */}
-                <button
-                  type="button"
-                  onClick={handleShareRoute}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 hover:text-white transition flex items-center gap-1.5"
-                  title="Copy deep link to share this route"
-                >
-                  {copiedLink ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-400" />
-                      <span className="text-emerald-400">Link Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="w-4 h-4 text-slate-400" />
-                      <span>Share Route</span>
-                    </>
-                  )}
-                </button>
+                {/* Right Action Buttons: Save Route & Share */}
+                <div className="flex items-center gap-2">
+                  {/* Save Route Button */}
+                  <button
+                    type="button"
+                    onClick={handleSaveRouteToDB}
+                    disabled={savingRoute || routeSaved}
+                    className={`px-3.5 py-2 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 ${
+                      routeSaved
+                        ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
+                        : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200 hover:text-white"
+                    }`}
+                    title={user ? "Save to your Supabase PostgreSQL account" : "Sign in to save route"}
+                  >
+                    {savingRoute ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                    ) : routeSaved ? (
+                      <>
+                        <BookmarkCheck className="w-4 h-4 text-emerald-400" />
+                        <span>Saved to Account!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bookmark className="w-4 h-4 text-purple-400" />
+                        <span>Save Route</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Share Link Button */}
+                  <button
+                    type="button"
+                    onClick={handleShareRoute}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 hover:text-white transition flex items-center gap-1.5"
+                    title="Copy deep link to share this route"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span className="text-emerald-400">Link Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-4 h-4 text-slate-400" />
+                        <span>Share Route</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* TAB CONTENT VIEWS */}
@@ -406,6 +520,14 @@ export default function HomePage() {
                 <FareBreakdownCard route={routeResult} />
               )}
 
+              {activeTab === "saved" && (
+                <SavedRoutesCard
+                  user={user}
+                  onOpenAuth={() => setAuthModalOpen(true)}
+                  onSelectRoute={handleSelectRecentRoute}
+                />
+              )}
+
               {activeTab === "directory" && (
                 <NetworkOverview onSelectStation={handleMapOrDirectorySelect} />
               )}
@@ -419,12 +541,26 @@ export default function HomePage() {
                 route={null}
                 onSelectStation={handleMapOrDirectorySelect}
               />
+              <SavedRoutesCard
+                user={user}
+                onOpenAuth={() => setAuthModalOpen(true)}
+                onSelectRoute={handleSelectRecentRoute}
+              />
               <NetworkOverview onSelectStation={handleMapOrDirectorySelect} />
               <FareBreakdownCard route={null} />
             </div>
           )}
         </div>
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={() => {
+          setActiveTab("saved");
+        }}
+      />
 
       {/* Info & About Modal */}
       {infoModalOpen && (
@@ -443,13 +579,13 @@ export default function HomePage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-white">About MetroSaathi</h3>
-                <p className="text-xs text-slate-400">Bangalore Namma Metro Navigator</p>
+                <p className="text-xs text-slate-400">Bangalore Namma Metro Navigator • Supabase PostgreSQL</p>
               </div>
             </div>
 
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
               <p>
-                <strong>MetroSaathi</strong> is a modern, high-precision route finder and transit companion for Bangalore&apos;s Namma Metro (BMRCL) network.
+                <strong>MetroSaathi</strong> is a modern, high-precision route finder and transit companion for Bangalore&apos;s Namma Metro (BMRCL) network, powered by a relational PostgreSQL database.
               </p>
               <div className="rounded-xl bg-slate-900/80 p-3 border border-slate-800 space-y-1.5">
                 <div className="font-semibold text-white">Network Coverage:</div>

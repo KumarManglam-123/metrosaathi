@@ -1,5 +1,5 @@
-import { EDGES } from "@/data/edges";
-import { STATIONS_MAP, getStationById } from "@/data/stations";
+import { STATIONS as DEFAULT_STATIONS } from "../data/stations";
+import { EDGES as DEFAULT_EDGES } from "../data/edges";
 import { calculateFare } from "./fare";
 import {
   Edge,
@@ -18,11 +18,13 @@ interface GraphEdge {
 
 // Build adjacency list map (bidirectional)
 const adjacencyList: Map<string, GraphEdge[]> = new Map();
+let currentStationsMap: Map<string, Station> = new Map();
 
-function initializeGraph() {
-  if (adjacencyList.size > 0) return;
+export function buildAdjacencyList(edges: Edge[], stations: Station[]) {
+  adjacencyList.clear();
+  currentStationsMap = new Map(stations.map((s) => [s.id, s]));
 
-  for (const edge of EDGES) {
+  for (const edge of edges) {
     if (!adjacencyList.has(edge.from)) {
       adjacencyList.set(edge.from, []);
     }
@@ -46,11 +48,13 @@ function initializeGraph() {
   }
 }
 
-// Ensure graph is initialized
-initializeGraph();
+// Initialize default dataset
+buildAdjacencyList(DEFAULT_EDGES, DEFAULT_STATIONS);
 
 export function getStationNeighbors(stationId: string): GraphEdge[] {
-  initializeGraph();
+  if (adjacencyList.size === 0) {
+    buildAdjacencyList(DEFAULT_EDGES, DEFAULT_STATIONS);
+  }
   return adjacencyList.get(stationId) || [];
 }
 
@@ -74,12 +78,16 @@ interface DijkstraState {
 export function findRoute(
   fromId: string,
   toId: string,
-  preference: RoutePreference = "fastest"
+  preference: RoutePreference = "fastest",
+  customStationsMap?: Map<string, Station>
 ): RouteResult | null {
-  initializeGraph();
+  if (adjacencyList.size === 0) {
+    buildAdjacencyList(DEFAULT_EDGES, DEFAULT_STATIONS);
+  }
 
-  const startStation = getStationById(fromId);
-  const endStation = getStationById(toId);
+  const stationsMap = customStationsMap || currentStationsMap;
+  const startStation = stationsMap.get(fromId) || DEFAULT_STATIONS.find((s) => s.id === fromId);
+  const endStation = stationsMap.get(toId) || DEFAULT_STATIONS.find((s) => s.id === toId);
 
   if (!startStation || !endStation) {
     return null;
@@ -103,14 +111,11 @@ export function findRoute(
   }
 
   // Transfer penalty in distance equivalents (km)
-  // "fastest" uses a moderate penalty (+1.8km eq) to avoid 100m shortcuts requiring line changes
-  // "fewest_transfers" uses a large penalty (+12.0km eq) to avoid changes unless unavoidable
   const transferPenaltyKm = preference === "fewest_transfers" ? 12.0 : 1.8;
 
   // Key: `${stationId}|${currentLine || 'any'}` -> minimum cost
   const minCostMap: Map<string, number> = new Map();
 
-  // Priority queue using sorted array
   const queue: DijkstraState[] = [
     {
       stationId: fromId,
@@ -124,11 +129,9 @@ export function findRoute(
   let bestFinalState: DijkstraState | null = null;
 
   while (queue.length > 0) {
-    // Pop lowest cost
     queue.sort((a, b) => a.cost - b.cost);
     const current = queue.shift()!;
 
-    // Check if reached destination
     if (current.stationId === toId) {
       bestFinalState = current;
       break;
@@ -178,7 +181,7 @@ export function findRoute(
   // Reconstruct full station sequence
   const allStations: Station[] = [startStation];
   for (const step of bestFinalState.path) {
-    const station = getStationById(step.stationId);
+    const station = stationsMap.get(step.stationId) || DEFAULT_STATIONS.find((s) => s.id === step.stationId);
     if (station) {
       allStations.push(station);
     }
@@ -193,17 +196,15 @@ export function findRoute(
 
   for (let i = 0; i < bestFinalState.path.length; i++) {
     const step = bestFinalState.path[i];
-    const station = getStationById(step.stationId)!;
+    const station = stationsMap.get(step.stationId) || DEFAULT_STATIONS.find((s) => s.id === step.stationId)!;
 
     if (currentLegLine === null) {
       currentLegLine = step.line;
     }
 
     if (step.line !== currentLegLine) {
-      // Line change occurred! Finalize previous leg
       const fromLegStation = currentLegStations[0];
-      const toLegStation =
-        currentLegStations[currentLegStations.length - 1];
+      const toLegStation = currentLegStations[currentLegStations.length - 1];
       const legStops = currentLegStations.length - 1;
       const legMinutes = Math.round(legStops * 2.4 + currentLegDistance * 0.4);
 
@@ -217,7 +218,6 @@ export function findRoute(
         estimatedMinutes: Math.max(legMinutes, 2),
       });
 
-      // Start new leg from the interchange station
       currentLegStations = [toLegStation, station];
       currentLegLine = step.line;
       currentLegDistance = step.distanceKm;
@@ -230,8 +230,7 @@ export function findRoute(
   // Push final leg
   if (currentLegStations.length > 1 && currentLegLine !== null) {
     const fromLegStation = currentLegStations[0];
-    const toLegStation =
-      currentLegStations[currentLegStations.length - 1];
+    const toLegStation = currentLegStations[currentLegStations.length - 1];
     const legStops = currentLegStations.length - 1;
     const legMinutes = Math.round(legStops * 2.4 + currentLegDistance * 0.4);
 
@@ -266,7 +265,6 @@ export function findRoute(
   const interchangeCount = Math.max(0, legs.length - 1);
   const totalStops = allStations.length - 1;
 
-  // Travel time formula: ~2.4 min per stop + 3.5 min per interchange
   const totalTimeMinutes = Math.round(
     totalStops * 2.4 + interchangeCount * 3.5
   );

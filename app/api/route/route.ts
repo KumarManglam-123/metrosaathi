@@ -1,5 +1,4 @@
-import { getStationById } from "@/data/stations";
-import { findRoute } from "@/lib/graph";
+import { findRouteWithDB, getStationByIdFromDB } from "@/lib/db-data";
 import { RoutePreference } from "@/lib/types";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -22,18 +21,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const startStation = getStationById(from);
+    const startStation = await getStationByIdFromDB(from);
     if (!startStation) {
       return NextResponse.json(
-        { error: `Origin station ID '${from}' not found in Namma Metro network.` },
+        { error: `Origin station ID '${from}' not found in Namma Metro database.` },
         { status: 400 }
       );
     }
 
-    const endStation = getStationById(to);
+    const endStation = await getStationByIdFromDB(to);
     if (!endStation) {
       return NextResponse.json(
-        { error: `Destination station ID '${to}' not found in Namma Metro network.` },
+        { error: `Destination station ID '${to}' not found in Namma Metro database.` },
         { status: 400 }
       );
     }
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
     const validPref: RoutePreference =
       preference === "fewest_transfers" ? "fewest_transfers" : "fastest";
 
-    const route = findRoute(from, to, validPref);
+    const route = await findRouteWithDB(from, to, validPref);
 
     if (!route) {
       return NextResponse.json(
@@ -70,23 +69,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const startStation = getStationById(from);
+  const startStation = await getStationByIdFromDB(from);
   if (!startStation) {
     return NextResponse.json(
-      { error: `Origin station ID '${from}' not found.` },
+      { error: `Origin station ID '${from}' not found in database.` },
       { status: 400 }
     );
   }
 
-  const endStation = getStationById(to);
+  const endStation = await getStationByIdFromDB(to);
   if (!endStation) {
     return NextResponse.json(
-      { error: `Destination station ID '${to}' not found.` },
+      { error: `Destination station ID '${to}' not found in database.` },
       { status: 400 }
     );
   }
 
-  const route = findRoute(from, to, preference);
+  const route = await findRouteWithDB(from, to, preference);
   if (!route) {
     return NextResponse.json(
       { error: "Could not find a valid route between the specified stations." },

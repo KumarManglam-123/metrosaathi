@@ -18,6 +18,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Ensure public directory exists so downstream COPY never fails
+RUN mkdir -p public
+
 # Disable Next.js telemetry collection during build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production

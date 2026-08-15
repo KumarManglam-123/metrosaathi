@@ -7,14 +7,24 @@ console.log("=========================================");
 console.log("MetroSaathi Test Suite & Routing Verification");
 console.log("=========================================");
 
+let failureCount = 0;
+
 // 1. Verify Stations and Edges
 console.log(`Total unique stations registered: ${STATIONS.length}`);
 console.log(`Total edges defined: ${EDGES.length}`);
 
 if (STATIONS.length !== 83) {
-  console.error(`Expected 83 unique stations, got ${STATIONS.length}`);
+  console.error(`❌ Expected 83 unique stations, got ${STATIONS.length}`);
+  failureCount++;
 } else {
   console.log(" Station count verified (83 stations: 37 Purple + 32 Green + 16 Yellow - 2 shared).");
+}
+
+if (EDGES.length !== 82) {
+  console.error(`❌ Expected 82 unique edges, got ${EDGES.length}`);
+  failureCount++;
+} else {
+  console.log(" Track edge count verified (82 edges).");
 }
 
 // 2. Verify Fare Calculation Table
@@ -45,6 +55,7 @@ for (const tc of testCasesFare) {
   if (result.tokenFare !== tc.expectedFare) {
     console.error(`❌ Fare mismatch for ${tc.stops} stops: Expected ₹${tc.expectedFare}, got ₹${result.tokenFare}`);
     fareErrors++;
+    failureCount++;
   }
 }
 if (fareErrors === 0) {
@@ -63,10 +74,15 @@ if (routeA) {
   console.log(`- Interchanges: ${routeA.interchangeCount}`);
   console.log(`- Fare: ₹${routeA.fare.tokenFare} (Smart Card: ₹${routeA.fare.smartCardPeak})`);
   console.log(`- Estimated Time: ${routeA.totalTimeMinutes} mins`);
-  if (routeA.interchangeCount !== 0) console.error("❌ Expected 0 interchanges for Purple line direct trip");
-  else console.log(" Trip A verified (Direct Purple Line)");
+  if (routeA.interchangeCount !== 0) {
+    console.error("❌ Expected 0 interchanges for Purple line direct trip");
+    failureCount++;
+  } else {
+    console.log(" Trip A verified (Direct Purple Line)");
+  }
 } else {
   console.error("❌ Route A failed to find path");
+  failureCount++;
 }
 
 // Scenario B: 1-Interchange (Indiranagar [Purple] -> Jayanagar [Green])
@@ -78,10 +94,15 @@ if (routeB) {
   console.log(`- Interchanges: ${routeB.interchangeCount}`);
   console.log(`- Transfer Station: ${routeB.legs[0]?.interchangeAfter?.atStation.name}`);
   console.log(`- Fare: ₹${routeB.fare.tokenFare}`);
-  if (routeB.interchangeCount !== 1) console.error("❌ Expected 1 interchange");
-  else console.log(" Trip B verified (1 Interchange at Majestic)");
+  if (routeB.interchangeCount !== 1) {
+    console.error("❌ Expected 1 interchange");
+    failureCount++;
+  } else {
+    console.log(" Trip B verified (1 Interchange at Majestic)");
+  }
 } else {
   console.error("❌ Route B failed to find path");
+  failureCount++;
 }
 
 // Scenario C: 2-Interchanges (Whitefield [Purple] -> Electronic City [Yellow])
@@ -94,10 +115,15 @@ if (routeC) {
   console.log(`- Total Distance: ${routeC.totalDistanceKm} km`);
   console.log(`- Travel Time: ${routeC.totalTimeMinutes} min`);
   console.log(`- Fare: ₹${routeC.fare.tokenFare}`);
-  if (routeC.interchangeCount !== 2) console.error("❌ Expected 2 interchanges (Majestic & RV Road)");
-  else console.log(" Trip C verified (2 Interchanges: Purple -> Green at Majestic, Green -> Yellow at RV Road)");
+  if (routeC.interchangeCount !== 2) {
+    console.error("❌ Expected 2 interchanges (Majestic & RV Road)");
+    failureCount++;
+  } else {
+    console.log(" Trip C verified (2 Interchanges: Purple -> Green at Majestic, Green -> Yellow at RV Road)");
+  }
 } else {
   console.error("❌ Route C failed to find path");
+  failureCount++;
 }
 
 // Scenario D: Direct Yellow Line (RV Road -> Bommasandra)
@@ -108,10 +134,23 @@ if (routeD) {
   console.log(`- Legs: ${routeD.legs.map((l) => l.line).join(", ")}`);
   console.log(`- Interchanges: ${routeD.interchangeCount}`);
   console.log(`- Fare: ₹${routeD.fare.tokenFare}`);
-  if (routeD.interchangeCount !== 0) console.error("❌ Expected 0 interchanges");
-  else console.log(" Trip D verified (Direct Yellow Line)");
+  if (routeD.interchangeCount !== 0) {
+    console.error("❌ Expected 0 interchanges");
+    failureCount++;
+  } else {
+    console.log(" Trip D verified (Direct Yellow Line)");
+  }
+} else {
+  console.error("❌ Route D failed to find path");
+  failureCount++;
 }
 
 console.log("\n=========================================");
-console.log("All Core Algorithms Verified Successfully!");
-console.log("=========================================");
+if (failureCount > 0) {
+  console.error(`❌ Test suite failed with ${failureCount} errors.`);
+  process.exit(1);
+} else {
+  console.log("All Core Algorithms Verified Successfully!");
+  console.log("=========================================");
+  process.exit(0);
+}

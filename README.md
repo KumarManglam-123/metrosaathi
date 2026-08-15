@@ -1,6 +1,7 @@
 # MetroSaathi — Bangalore Metro (Namma Metro) Route Finder
 
-![MetroSaathi Banner](https://img.shields.io/badge/BMRCL-Namma%20Metro%202026-78288C?style=for-the-badge)
+[![CI Pipeline](https://github.com/KumarManglam-123/metrosaathi/actions/workflows/ci.yml/badge.svg)](https://github.com/KumarManglam-123/metrosaathi/actions/workflows/ci.yml)
+![BMRCL 2026](https://img.shields.io/badge/BMRCL-Namma%20Metro%202026-78288C?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Multi--Stage%20Alpine-2496ED?style=for-the-badge&logo=docker)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17.6%20Supabase-336791?style=for-the-badge&logo=postgresql)
 ![Next.js 14](https://img.shields.io/badge/Next.js-14.2-black?style=for-the-badge&logo=next.js)
@@ -10,6 +11,7 @@
 **MetroSaathi** is a production-quality, full-stack transit route finder web application built for commuters in Bengaluru. It accurately maps the entire **Namma Metro (BMRCL)** network across the **Purple**, **Green**, and **Yellow** lines, calculating optimal routes, step-by-step interchange guides, official 2026 station-count fare slabs, travel times, saved commuter routes, and an interactive schematic visual map.
 
 > 📖 **Interview & Technical Guides**:
+> - [**`CICD.md`**](./CICD.md): GitHub Actions CI pipeline, build & algorithmic test automation, hermetic testing, and CI vs CD separation.
 > - [**`DOCKER.md`**](./DOCKER.md): Multi-stage builds, non-root security (`nextjs:nodejs`), Next.js standalone tracing, and local vs hosted database isolation.
 > - [**`DATABASE.md`**](./DATABASE.md): Relational schema design, 3NF junction tables vs array columns, and graph caching tradeoffs.
 
@@ -17,23 +19,27 @@
 
 ## Key Features
 
-1. **Docker Containerization (`Dockerfile`, `docker-compose.yml`)**:
+1. **Continuous Integration & Automated Testing (`.github/workflows/ci.yml`)**:
+   - Automated GitHub Actions workflow on every push and PR to `main`.
+   - Runs deterministic `npm ci`, Dijkstra graph verification (`npm test`), TypeScript validation, and Next.js production compilation.
+
+2. **Docker Containerization (`Dockerfile`, `docker-compose.yml`)**:
    - Multi-stage build producing an ultra-slim (~150MB) container based on `node:20-alpine`.
    - Runs as an unprivileged non-root user (`nextjs:nodejs`, UID 1001) for container security.
    - `docker-compose.yml` spins up the Next.js app alongside an isolated local PostgreSQL 17 database.
 
-2. **Relational PostgreSQL Data Layer & Supabase Auth**:
+3. **Relational PostgreSQL Data Layer & Supabase Auth**:
    - Normalized relational schema (`lines`, `stations`, `station_lines`, `edges`, `saved_routes`).
    - Many-to-many junction tables (`station_lines`) enforcing strict foreign key referential integrity.
    - User authentication via Supabase Auth with ability to save and sync favorite routes across devices.
 
-3. **Multi-Line Dijkstra Routing Engine (`lib/graph.ts`)**:
+4. **Multi-Line Dijkstra Routing Engine (`lib/graph.ts`)**:
    - Computes the shortest transit path across the network.
    - Built-in **line transfer penalty** (+1.8km eq distance / 3.5 min time penalty) to avoid micro-shortcut transfers.
    - Supports **"Fastest Route"** vs **"Fewest Line Changes"** preference toggles.
    - Decomposes journeys into clear line-by-line `RouteLeg` objects with interchange walking directions.
 
-4. **Official 2026 BMRCL Fare Structure (`lib/fare.ts`)**:
+5. **Official 2026 BMRCL Fare Structure (`lib/fare.ts`)**:
    - Calculated strictly based on the number of stations traveled:
      - 1–2 stations: ₹10
      - 3–4 stations: ₹20
@@ -46,16 +52,16 @@
      - 26+ stations: ₹90
    - Smart Card / NCMC discount calculation (5% peak, 10% off-peak & Sundays) and WhatsApp QR ticketing (5% off).
 
-5. **Interactive Schematic SVG Transit Map (`components/MetroMapSvg.tsx`)**:
+6. **Interactive Schematic SVG Transit Map (`components/MetroMapSvg.tsx`)**:
    - Clean 45°/90° schematic diagram of the complete Bangalore Metro network.
    - Dynamic glowing flow animation tracing the active computed route.
    - Zoom, Pan, Reset controls, station hover tooltips, and click-to-select routing endpoints.
 
-6. **Fuzzy Search & Autocomplete (`components/AutocompleteInput.tsx`)**:
+7. **Fuzzy Search & Autocomplete (`components/AutocompleteInput.tsx`)**:
    - Instant search across station names, short forms, Kannada script, and common landmarks / aliases (e.g. "ITPL", "Tin Factory", "IKEA", "Majestic").
    - 180° animated swap button.
 
-7. **Nearby Station Detection (Geolocation)**:
+8. **Nearby Station Detection (Geolocation)**:
    - Uses browser GPS and the Haversine distance formula to find the closest Namma Metro station and walking time estimate.
 
 ---
